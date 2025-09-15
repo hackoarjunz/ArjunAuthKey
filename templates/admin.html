@@ -1,0 +1,60 @@
+
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Admin Panel</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="container">
+<h1>AuthKey Admin</h1>
+<div id="login">
+<form id="loginform" method="post" action="/admin/login">
+<input type="email" name="email" placeholder="admin email" required><br>
+<input type="password" name="password" placeholder="password" required><br>
+<input type="text" name="otp" placeholder="2FA (if enabled)"><br>
+<button type="submit">Login</button>
+</form>
+</div>
+<div id="panel" style="display:none;">
+<button onclick="logout()">Logout</button>
+<h2>Generate Key</h2>
+Email: <input id="gen_email"><br>
+Days: <input id="gen_days" value="30"><br>
+<button onclick="generate()">Generate</button>
+<p id="gen_msg"></p>
+<h2>Keys</h2>
+Search: <input id="q"><button onclick="load(1)">Search</button>
+<div id="keys"></div>
+<h2>Logs</h2><a href="/admin/logs/download">Download CSV</a>
+</div>
+</div>
+<script>
+document.getElementById('loginform').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/admin/login', {method:'POST', body:fd, redirect:'manual'});
+  if (res.status===302) { document.getElementById('login').style.display='none'; document.getElementById('panel').style.display='block'; load(1); }
+  else { alert('Login failed'); }
+});
+
+function logout(){ fetch('/admin/logout',{method:'POST'}).then(()=>location.reload()); }
+
+async function generate(){ 
+  const email = document.getElementById('gen_email').value;
+  const days = parseInt(document.getElementById('gen_days').value||30);
+  const res = await fetch('/generate', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({email: email || null, days_valid: days, email_to_user:false})});
+  const j = await res.json();
+  document.getElementById('gen_msg').innerText = JSON.stringify(j);
+  load(1);
+}
+
+async function load(page){
+  const q = document.getElementById('q').value;
+  const res = await fetch('/admin/keys?q='+encodeURIComponent(q)+'&page='+page);
+  if (res.status===401) { alert('Login required'); return; }
+  const j = await res.json();
+  const div = document.getElementById('keys');
+  div.innerHTML = '';
+  j.items.forEach(k=>{ const el = document.createElement('div'); el.innerText = `#${k.id} ${k.key} ${k.status} expires:${k.expires_at} owner:${k.owner}`; const btn = document.createElement('button'); btn.innerText='Revoke'; btn.onclick=()=>revoke(k.id); el.appendChild(btn); div.appendChild(el); });
+}
+
+async function revoke(id){ if(!confirm('Revoke?')) return; const res = await fetch('/admin/keys/'+id, {method:'DELETE'}); if(res.ok) load(1); else alert('fail'); }
+</script>
+</body></html>
